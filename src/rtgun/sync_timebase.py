@@ -1,0 +1,92 @@
+from pathlib import Path
+import re
+import numpy as np
+import soundfile as sf
+from typing import Dict, Tuple
+
+from .config import load_cfg
+from .utils_time import parse_iso, shift_iso, utc_to_sample, iso_to_filename_stamp
+
+MIC_PATTERN = re.compile(r"^(?P<stamp>[^_]+)_(?P<mic>M[0-9]+)\.(wav|flac)$", re.IGNORECASE)
+
+def _iso_from_name(name: str) -> str:
+    # "2025-09-16T11-00-00Z_M1.wav" -> "2025-09-16T11:00:00Z"
+    stamp = name.split("_", 1)[0]
+    return re.sub(r"T(\d{2})-(\d{2})-(\d{2})Z", r"T\1:\2:\3Z", stamp)
+
+# FIND RAW AUDIO FILES BASED ON TRIGGER TIMESTAMP 
+def _find_raw_files(raw_dir: Path, trigger_iso: str) -> Dict[str, Path]:
+    stamp = iso_to_filename_stamp(trigger_iso)
+    files = {}
+    for p in raw_dir.glob(f"{stamp}_M*.wav"):
+        m = MIC_PATTERN.match(p.name)
+        if m:
+            files[m.group("mic").upper()] = p
+    for p in raw_dir.glob(f"{stamp}_M*.flac"):
+        m = MIC_PATTERN.match(p.name)
+        if m:
+            files[m.group("mic").upper()] = p
+    return files
+
+# SLICING AUDIO, working with samples
+def _pad_slice(x: np.ndarray, start: int, end: int) -> np.ndarray:
+    n = len(x)
+    L = end - start
+    # deciding how many zeros to pad on each side
+    left_pad = max(0, -start)
+    right_pad = max(0, end - n)
+    core_start = max(0, start)
+    core_end = min(n, end)
+    out = np.zeros(L, dtype=np.float32)
+    #create sliced numpy array with zero padding if needed, +3 sec safety margin
+    if core_end > core_start:
+        out[left_pad:left_pad + (core_end - core_start)] = x[core_start:core_end]
+    return out
+
+def sync_window(trigger_iso: str) -> Tuple[Dict[str, np.ndarray], int]:
+    """
+    Returns dict[mic_id] -> synced mono array, and fs
+    Window = [trigger - pre_margin, trigger + post_margin]
+    """
+    cfg = load_cfg()
+    fs = cfg.defaults.sample_rate
+    pre = cfg.defaults.pre_margin_s
+    post = cfg.defaults.post_margin_s
+
+    project_root = Path(__file__).resolve().parents[2]
+    raw_dir = project_root / "data" / "raw"
+    synced_dir = project_root / "data" / "synced"
+    synced_dir.mkdir(parents=True, exist_ok=True)
+
+    files = _find_raw_files(raw_dir, trigger_iso)
+    if not files:
+        raise FileNotFoundError("No raw files for trigger timestamp")
+
+    start_iso = shift_iso(trigger_iso, -pre)
+    end_iso = shift_iso(trigger_iso, post)
+
+    # Compute target window sample indices relative to each file start
+    out: Dict[str, np.ndarray] = {}
+    for mic_id, path in sorted(files.items()):
+
+        data, fs_in = sf.read(path, always_2d=False)
+        if data.ndim > 1:
+            data = data[:, 0]
+        if fs_in != fs:
+            raise ValueError(f"Sample rate mismatch for {path}: {fs_in} != {fs}")
+        
+        file_start_iso = _iso_from_name(path.name)
+    
+    
+        s_idx = utc_to_sample(file_start_iso, start_iso, fs)
+        e_idx = utc_to_sample(file_start_iso, end_iso,   fs)
+
+
+        out[mic_id] = _pad_slice(np.asarray(data, dtype=np.float32), s_idx, e_idx)
+
+        # save synced file
+        win_stamp = f"{iso_to_filename_stamp(start_iso)}__{iso_to_filename_stamp(end_iso)}"
+        out_name = f"{win_stamp}_{mic_id}_synced.wav"
+        sf.write(synced_dir / out_name, out[mic_id], fs)
+
+    return out, fs
