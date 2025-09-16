@@ -1,0 +1,8 @@
+[project]
+name = "rt-gun-audio-sync"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "soundfile", "pydantic", "pyyaml", "click"]
+
+[project.scripts]
+rtgun = "rtgun.cli:main"
