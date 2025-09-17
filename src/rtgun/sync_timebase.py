@@ -82,7 +82,7 @@ def sync_window(trigger_iso: str) -> Tuple[Dict[str, np.ndarray], int]:
         e_idx = utc_to_sample(file_start_iso, end_iso,   fs)
 
 
-        out[mic_id] = _pad_slice(np.asarray(data, dtype=np.float32), s_idx, e_idx)
+        out[mic_id] = _pad_slice(data.astype(np.float32), s_idx, e_idx)
 
         # save synced file
         win_stamp = f"{iso_to_filename_stamp(start_iso)}__{iso_to_filename_stamp(end_iso)}"
