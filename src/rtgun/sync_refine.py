@@ -31,7 +31,7 @@ def gcc_phat_delay(a: np.ndarray,
     a = np.asarray(a, dtype=np.float32)
     b = np.asarray(b, dtype=np.float32)
 
-    # zero-mean (helps with DC)
+    # zero-mean. make average value = 0. It helps to clearly see the peak.
     a = a - np.mean(a)
     b = b - np.mean(b)
 

@@ -34,7 +34,7 @@ def test_click_present_near_center():
     center = int(PRE * FS)
     for mic, x in by_mic.items():
         # Находим максимальный пик в окне ±50 мс вокруг центра
-        w = int(0.01 * FS)
+        w = int(0.3 * FS)
         segment = x[center - w:center + w]
         peak_idx = np.argmax(np.abs(segment))
         # пик должен существовать

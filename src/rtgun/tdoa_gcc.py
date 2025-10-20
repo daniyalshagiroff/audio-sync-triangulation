@@ -29,5 +29,8 @@ def tdoa_delays(chans: Dict[str, np.ndarray],
         ref_mic=ref_mic,
     )
     delays_samples = {k: -v for k, v in delays_samples.items()}
+    print("Delays (samples):", delays_samples)
     delays_sec = {k: v / float(fs) for k, v in delays_samples.items()}
+    print("Delays (sec):", delays_sec)
+    print("Peaks:", peaks)
     return delays_samples, delays_sec, peaks
